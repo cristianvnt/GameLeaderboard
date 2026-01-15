@@ -1,5 +1,6 @@
 #include "LockMgr.h"
 #include "DeadlockDetector.h"
+#include "TransactionMgr.h"
 
 #include <thread>
 #include <chrono>
@@ -70,8 +71,102 @@ void TestDeadlockDetection()
 }
 #pragma endregion
 
+#pragma region TestUndoLog
+void TestUndoLog()
+{
+    UndoLog log;
+    
+    // Simulate operations
+    log.Record(UndoOperation{ DatabaseType::Postgres, "UPDATE players SET score = 100 WHERE id = 1" });
+    log.Record(UndoOperation{ DatabaseType::Postgres, "DELETE FROM matches WHERE id = 5"});
+    log.Record(UndoOperation{ DatabaseType::Cassandra, "UPDATE stats SET games = 10" });
+    
+    std::cout << "Recorded 3 undo operations\n";
+    std::cout << "IsEmpty: " << (log.IsEmpty() ? "yes" : "no") << "\n";
+    
+    auto undoOps = log.GetUndoOperations();
+    std::cout << "\nUndo operations (reversed):\n";
+    for (size_t i = 0; i < undoOps.size(); ++i)
+    {
+        std::cout << i + 1 << ". " << undoOps[i].undoSqlStr << "\n";
+    }
+    
+    log.Clear();
+    std::cout << "\nAfter clear, IsEmpty: " << (log.IsEmpty() ? "yes" : "no") << "\n";
+}
+#pragma endregion
+
+#pragma region TestTransactionMgr
+void TestTransactionMgr()
+{
+    TransactionMgr txMgr;
+    Transaction tx(1);
+
+    tx.AddOperation(SqlOperation
+    {
+        DatabaseType::Postgres,
+        "UPDATE players SET score = 150 WHERE id = 5",
+        {"player:5"},
+        LockType::Exclusive
+    });
+
+    tx.AddOperation(SqlOperation
+    {
+        DatabaseType::Postgres,
+        "INSERT INTO matches VALUES (123, 5, 150)",
+        {"match:123"},
+        LockType::Exclusive
+    });
+
+    tx.AddOperation(SqlOperation
+    {
+        DatabaseType::Cassandra,
+        "UPDATE stats SET games_played = games_played + 1 WHERE player_id = 5",
+        {"stats:5"},
+        LockType::Exclusive
+    });
+
+    bool success = txMgr.ExecuteTransaction(tx);
+
+    std::cout << "\nTransaction " << (success ? "YAY" : "NOOOOOOOOO") << "\n";
+}
+#pragma endregion
+
+#pragma region TestConcurrency
+void ConcurrentTx(TransactionMgr& mgr, TransactionId txId, int sleepMs)
+{
+    Transaction tx(txId);
+    tx.AddOperation(SqlOperation
+    {
+        DatabaseType::Postgres,
+        "UPDATE players SET score = " + std::to_string(txId * 100),
+        {"player:alice"},
+        LockType::Exclusive
+    });
+    
+    std::cout << "TX" << txId << " starting\n";
+    mgr.ExecuteTransaction(tx);
+    std::this_thread::sleep_for(std::chrono::milliseconds(sleepMs));
+}
+
+void TestConcurrency()
+{
+    TransactionMgr mgr;
+    
+    std::thread t1(ConcurrentTx, std::ref(mgr), 1, 2000);
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    std::thread t2(ConcurrentTx, std::ref(mgr), 2, 1000);
+    
+    t1.join();
+    t2.join();
+}
+#pragma endregion
+
 int main()
 {
     //TestBasicLocking();
-    TestDeadlockDetection();
+    //TestDeadlockDetection();
+    //TestUndoLog();
+    //TestTransactionMgr();
+    //TestConcurrency();
 }
