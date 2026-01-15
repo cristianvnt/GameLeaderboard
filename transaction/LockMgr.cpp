@@ -2,7 +2,7 @@
 
 #include <iostream>
 
-bool LockMgr::acquireLock(TransactionId txId, ResourceId resId, LockType type)
+bool LockMgr::AcquireLock(TransactionId txId, ResourceId resId, LockType type)
 {
     std::unique_lock<std::mutex> lock(_mutex);
     LockInfo& lockInfo = _lockTable[resId];
@@ -14,9 +14,9 @@ bool LockMgr::acquireLock(TransactionId txId, ResourceId resId, LockType type)
             && !(lockInfo.sharedHolders.size() == 1 && lockInfo.sharedHolders.count(txId))))
         {
             std::cout << "TX" << txId << " waitin for exclusive lock on " << resId << "\n";
-            lockInfo.waitQ.insert(txId);
+            lockInfo.waitinQ.insert(txId);
             _cv.wait(lock);
-            lockInfo.waitQ.erase(txId);
+            lockInfo.waitinQ.erase(txId);
         }
 
         lockInfo.isExclusive = true;
@@ -31,9 +31,9 @@ bool LockMgr::acquireLock(TransactionId txId, ResourceId resId, LockType type)
     while (lockInfo.isExclusive && lockInfo.exclusiveHolder != txId)
     {
         std::cout << "TX" << txId << " waitin for shared lock on " << resId << "\n";
-        lockInfo.waitQ.insert(txId);
+        lockInfo.waitinQ.insert(txId);
         _cv.wait(lock);
-        lockInfo.waitQ.erase(txId);
+        lockInfo.waitinQ.erase(txId);
     }
 
     lockInfo.sharedHolders.insert(txId);
@@ -43,7 +43,55 @@ bool LockMgr::acquireLock(TransactionId txId, ResourceId resId, LockType type)
     return true;
 }
 
-void LockMgr::releaseLocks(TransactionId txId)
+void LockMgr::ReleaseLocks(TransactionId txId)
 {
+    std::unique_lock<std::mutex> lock(_mutex);
 
+    auto it = _txLocks.find(txId);
+    if (it == _txLocks.end())
+        return;
+
+    for (ResourceId const& resId : it->second)
+    {
+        auto lockIt = _lockTable.find(resId);
+        if (lockIt == _lockTable.end())
+            continue;
+
+        LockInfo& lockInfo = lockIt->second;
+        lockInfo.sharedHolders.erase(txId);
+
+        if (lockInfo.exclusiveHolder != txId)
+            continue;
+            
+        lockInfo.isExclusive = false;
+        lockInfo.exclusiveHolder = 0;
+    }
+
+    _txLocks.erase(txId);
+    _cv.notify_all();
+    
+    std::cout << "TX" << txId << " released all locks\n"; 
+}
+
+std::map<TransactionId, std::set<TransactionId>> LockMgr::GetWaitForGraph()
+{
+    std::unique_lock<std::mutex> lock(_mutex);
+    std::map<TransactionId, std::set<TransactionId>> waitForGraph;
+
+    for (auto const& [resId, lockInfo] : _lockTable)
+    {
+        for (TransactionId waiter : lockInfo.waitinQ)
+        {
+            if (lockInfo.isExclusive)
+                waitForGraph[waiter].insert(lockInfo.exclusiveHolder);
+            else
+            {
+                for(TransactionId holder : lockInfo.sharedHolders)
+                if (holder != waiter)
+                    waitForGraph[waiter].insert(holder);
+            }
+        }
+    }
+
+    return waitForGraph;
 }

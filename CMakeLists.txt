@@ -17,11 +17,14 @@ find_package(Threads REQUIRED)
 find_package(PostgreSQL REQUIRED)
 find_library(PQXX_LIB pqxx REQUIRED)
 
-add_executable(TestLockMgr
-    transaction/LockMgr.cpp
-    TestLockMgr.cpp    
+file(GLOB_RECURSE SOURCES 
+    "transaction/*.cpp"
+    "database/*.cpp"
+    "network/*.cpp"
 )
 
-target_link_libraries(TestLockMgr
+add_executable(${PROJECT_NAME} ${SOURCES} GameLeaderboard.cpp)
+
+target_link_libraries(${PROJECT_NAME}
     Threads::Threads
 )

@@ -13,7 +13,7 @@ struct LockInfo
     std::set<TransactionId> sharedHolders;
     TransactionId exclusiveHolder;
     bool isExclusive;
-    std::set<TransactionId> waitQ;
+    std::set<TransactionId> waitinQ;
 
     LockInfo() : exclusiveHolder{ 0 }, isExclusive{ false } { }
 };
@@ -30,9 +30,9 @@ public:
     LockMgr() = default;
     ~LockMgr() = default;
 
-    bool acquireLock(TransactionId txId, ResourceId resId, LockType type);
-    void releaseLocks(TransactionId txId);
-    std::map<TransactionId, std::set<TransactionId>> getWaitForGraph();
+    bool AcquireLock(TransactionId txId, ResourceId resId, LockType type);
+    void ReleaseLocks(TransactionId txId);
+    std::map<TransactionId, std::set<TransactionId>> GetWaitForGraph();
 };
 
 #endif
