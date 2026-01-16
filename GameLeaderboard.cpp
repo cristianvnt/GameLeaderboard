@@ -1,6 +1,8 @@
 #include "LockMgr.h"
 #include "DeadlockDetector.h"
 #include "TransactionMgr.h"
+#include "PostgresConnector.h"
+#include "SocketServer.h"
 
 #include <thread>
 #include <chrono>
@@ -162,6 +164,127 @@ void TestConcurrency()
 }
 #pragma endregion
 
+#pragma region TestPostgresConnector
+void TestPostgresConnector()
+{
+    PostgresConnector mainDb("leaderboard_main");
+
+    auto rows = mainDb.Query("SELECT * FROM players");
+    std::cout << "Players in db: \n";
+    for (auto const& row : rows)
+        std::cout << "Id: " << row.at("id") << ", Username: " << row.at("username") << ", Score: " << row.at("score") << '\n';
+}
+#pragma endregion
+
+#pragma region TestRealTransaction
+void TestRealTransaction()
+{
+    PostgresConnector mainDb("leaderboard_main");
+    PostgresConnector statsDb("leaderboard_stats");
+
+    std::cout << "BEFORE TRANSACTION:\n";
+    auto beforeMain = mainDb.Query("SELECT * FROM players WHERE id = 1");
+    auto beforeStats = statsDb.Query("SELECT * FROM player_stats WHERE player_id = 1");
+    
+    std::cout << "Player: " << beforeMain[0].at("username") << ", Score: " << beforeMain[0].at("score") << "\n";
+    std::cout << "Games played: " << beforeStats[0].at("games_played") << "\n\n";
+
+    TransactionMgr txMgr;
+    Transaction tx(1);
+
+    tx.AddOperation(SqlOperation
+    {
+        DatabaseType::Postgres,
+        "UPDATE players SET score = score + 50 WHERE id = 1",
+        {"player:1"},
+        LockType::Exclusive
+    });
+    
+    tx.AddOperation(SqlOperation
+    {
+        DatabaseType::Cassandra,
+        "UPDATE player_stats SET games_played = games_played + 1 WHERE player_id = 1",
+        {"stats:1"},
+        LockType::Exclusive
+    });
+
+    std::cout << "Executin tx...\n";
+    bool success = txMgr.ExecuteTransaction(tx);
+    std::cout << "Tx " << (success ? "YAY" : "NOOOOOOO") << "\n\n";
+
+    std::cout << "AFTER TRANSACTION:\n";
+    auto afterMain = mainDb.Query("SELECT * FROM players WHERE id = 1");
+    auto afterStats = statsDb.Query("SELECT * FROM player_stats WHERE player_id = 1");
+    
+    std::cout << "Player: " << afterMain[0].at("username") << ", Score: " << afterMain[0].at("score") << "\n";
+    std::cout << "Games played: " << afterStats[0].at("games_played") << "\n\n";
+}
+#pragma endregion
+
+#pragma region TestSocketServer
+void TestSocketServer()
+{
+    SocketServer server(8080);
+    
+    server.SetRequestHandler([](std::string const& request)
+    {
+        std::cout << "Processing: " << request;
+        return "SUCCESS|Echo: " + request;
+    });
+    
+    std::cout << "Starting server..\n";
+    server.Start();
+}
+#pragma endregion
+
+#pragma region TestRollback
+void TestRollback()
+{
+    PostgresConnector mainDb("leaderboard_main");
+    
+    auto before = mainDb.Query("SELECT score FROM players WHERE username = 'pepe'");
+    std::cout << "Before: pepe score = " << before[0].at("score") << "\n";
+    
+    TransactionMgr txMgr;
+    Transaction tx(999);
+    
+    tx.AddOperation(SqlOperation
+    {
+        DatabaseType::Postgres,
+        "UPDATE players SET score = score + 1000 WHERE username = 'pepe'",
+        {"player:pepe"},
+        LockType::Exclusive
+    });
+    
+    tx.AddOperation(SqlOperation
+    {
+        DatabaseType::Postgres,
+        "UPDATE no_table SET x = 1",
+        {"player:fake"},
+        LockType::Exclusive
+    });
+    
+    std::cout << "\nAttempting transaction...\n";
+    
+    try
+    {
+        txMgr.ExecuteTransaction(tx);
+    }
+    catch (...)
+    {
+        std::cout << "Transaction failed as expected\n";
+    }
+    
+    auto after = mainDb.Query("SELECT score FROM players WHERE username = 'pepe'");
+    std::cout << "After: pepe score = " << after[0].at("score") << "\n";
+    
+    if (before[0].at("score") == after[0].at("score"))
+        std::cout << "\nRollback worked! Score unchanged.\n";
+    else
+        std::cout << "\nRollback FAILED! Score was modified.\n";
+}
+#pragma endregion
+
 int main()
 {
     //TestBasicLocking();
@@ -169,4 +292,8 @@ int main()
     //TestUndoLog();
     //TestTransactionMgr();
     //TestConcurrency();
+    //TestPostgresConnector();
+    //TestRealTransaction();
+    //TestSocketServer();
+    //TestRollback();
 }

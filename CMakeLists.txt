@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.14)
 
 project(GameLeaderboard)
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 include_directories(
@@ -13,9 +13,10 @@ include_directories(
 )
 
 find_package(Threads REQUIRED)
-
 find_package(PostgreSQL REQUIRED)
-find_library(PQXX_LIB pqxx REQUIRED)
+
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(PQXX REQUIRED libpqxx)
 
 file(GLOB_RECURSE SOURCES 
     "transaction/*.cpp"
@@ -24,7 +25,19 @@ file(GLOB_RECURSE SOURCES
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES} GameLeaderboard.cpp)
-
+target_include_directories(${PROJECT_NAME} PRIVATE ${PQXX_INCLUDE_DIRS})
+target_link_directories(${PROJECT_NAME} PRIVATE ${PQXX_LIBRARY_DIRS})
 target_link_libraries(${PROJECT_NAME}
     Threads::Threads
+    pqxx
+    pq
+)
+
+add_executable(TransactionServer ${SOURCES} ServerMain.cpp)
+target_include_directories(TransactionServer PRIVATE ${PQXX_INCLUDE_DIRS})
+target_link_directories(TransactionServer PRIVATE ${PQXX_LIBRARY_DIRS})
+target_link_libraries(TransactionServer
+    Threads::Threads
+    pqxx
+    pq
 )

@@ -1,0 +1,40 @@
+sudo -u postgres psql
+
+CREATE DATABASE leaderboard_main;
+CREATE DATABASE leaderboard_stats;
+
+\c leaderboard_main
+
+CREATE TABLE players (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    score INTEGER DEFAULT 0
+);
+
+CREATE TABLE matches (
+    id SERIAL PRIMARY KEY,
+    player_id INTEGER REFERENCES players(id),
+    score INTEGER,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+INSERT INTO players (username, score) VALUES 
+    ('pepe', 100),
+    ('bob', 50),
+    ('maxito', 75);
+
+
+\c leaderboard_stats
+
+CREATE TABLE player_stats (
+    player_id INTEGER PRIMARY KEY,
+    games_played INTEGER DEFAULT 0,
+    total_score INTEGER DEFAULT 0
+);
+
+INSERT INTO player_stats (player_id, games_played, total_score) VALUES 
+    (1, 5, 100),
+    (2, 3, 50),
+    (3, 4, 75);
+
+\q
