@@ -166,6 +166,37 @@ std::string HandleRequest(TransactionMgr& txMgr, PostgresConnector& mainDb, std:
         
         return RequestParser::BuildResponse(success, success ? "Total score updated" : "Failed");
     }
+    else if (req.command == "TEST_ROLLBACK")
+    {
+        std::string player = req.params["player"];
+        
+        auto rows = mainDb.Query("SELECT id, score FROM players WHERE username = '" + player + "'");
+        if (rows.empty())
+            return RequestParser::BuildResponse(false, "Player not found");
+        
+        std::string playerId = rows[0].at("id");
+        
+        Transaction tx(nextTxId++);
+        
+        tx.AddOperation(SqlOperation
+        {
+            DatabaseType::Postgres,
+            "UPDATE players SET score = score + 1000 WHERE username = '" + player + "'",
+            {"player:" + player},
+            LockType::Exclusive
+        });
+        
+        tx.AddOperation(SqlOperation{
+            DatabaseType::Postgres,
+            "UPDATE nonexistent_table SET x = 1",
+            {"fake"},
+            LockType::Exclusive
+        });
+        
+        bool success = txMgr.ExecuteTransaction(tx);
+        
+        return RequestParser::BuildResponse(success, success ? "Should not see this" : "ROLLED BACK");
+    }
     
     return RequestParser::BuildResponse(false, "Unk command");
 }

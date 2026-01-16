@@ -77,8 +77,7 @@ void TestDeadlockDetection()
 void TestUndoLog()
 {
     UndoLog log;
-    
-    // Simulate operations
+
     log.Record(UndoOperation{ DatabaseType::Postgres, "UPDATE players SET score = 100 WHERE id = 1" });
     log.Record(UndoOperation{ DatabaseType::Postgres, "DELETE FROM matches WHERE id = 5"});
     log.Record(UndoOperation{ DatabaseType::Cassandra, "UPDATE stats SET games = 10" });
@@ -295,5 +294,5 @@ int main()
     //TestPostgresConnector();
     //TestRealTransaction();
     //TestSocketServer();
-    //TestRollback();
+    TestRollback();
 }

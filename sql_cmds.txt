@@ -38,3 +38,21 @@ INSERT INTO player_stats (player_id, games_played, total_score) VALUES
     (3, 4, 75);
 
 \q
+
+
+---BASIC TESTS---
+GET_PLAYER|player:pepe
+SUBMIT_SCORE|player:pepe|score:100
+GET_PLAYER|player:pepe
+TRANSFER_POINTS|from:pepe|to:bob|amount:50
+GET_PLAYER|player:bob
+GET_LEADERBOARD|limit:3
+GET_STATS|player:pepe
+UPDATE_TOTAL_SCORE|player:pepe
+
+---OTHERS
+telnet localhost 8080
+TRANSFER_POINTS|from:pepe|to:bob|amount:10
+
+telnet localhost 8080
+TRANSFER_POINTS|from:bob|to:maxito|amount:10

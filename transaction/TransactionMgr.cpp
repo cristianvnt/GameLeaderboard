@@ -133,7 +133,7 @@ std::string TransactionMgr::BuildUndoOperation(SqlOperation const &op)
     }
     
     if (sql.find("INSERT INTO matches") != std::string::npos)
-        return "-- Cant INSERT without ID";
+        return "-- Cant INSERT for now";
     
     return "-- Undo for: " + sql;
 }
